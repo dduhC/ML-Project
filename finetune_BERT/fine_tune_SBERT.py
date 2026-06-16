@@ -1,45 +1,38 @@
-# from sentence_transformers import SentenceTransformer, InputExample, losses
-# from torch.utils.data import DataLoader
-
-# model = SentenceTransformer('all-MiniLM-L6-v2')
-
-# train_examples = [
-#     InputExample(texts=[anchor, positive, negative]),
-#     # ...
-# ]
-
-# train_dataloader = DataLoader(train_examples, shuffle=True, batch_size=16)
-# train_loss = losses.TripletLoss(model, distance_metric=losses.TripletDistanceMetric.COSINE, triplet_margin=0.5)
-
-# model.fit(
-#     train_objectives=[(train_dataloader, train_loss)],
-#     epochs=3,
-#     warmup_steps=100,
-#     output_path='./finetuned-arxiv-sbert'
-# )
-
-from sentence_transformers import SentenceTransformer, losses
+from sentence_transformers import SentenceTransformer, InputExample, losses
 from torch.utils.data import DataLoader
-from sentence_transformers.util import batch_to_device
-import torch
+import pandas as pd
 
-model = SentenceTransformer("all-MiniLM-L6-v2")
-device = model.device
+# Load data
+triplets_df = pd.read_csv("finetune_BERT/triplets.csv")
+df = pd.read_csv("finetune_BERT/train_content.csv").reset_index(drop=True)
 
-anchors = ["It's nice weather outside today.", "He drove to work."]
-positives = ["It's so sunny.", "He took the car to the office."]
-negatives = ["It's quite rainy, sadly.", "She walked to the store."]
+# Map paper_id → text
+id_to_text = dict(zip(df["paper_id"], df["content"]))  # hoặc df["title"] + " " + df["abstract"]
 
-# Tokenize từng phần
-features_anchor = batch_to_device(model.preprocess(anchors), device)
-features_positive = batch_to_device(model.preprocess(positives), device)
-features_negative = batch_to_device(model.preprocess(negatives), device)
+# Build InputExample list
+train_examples = []
+for _, row in triplets_df.iterrows():
+    anchor   = id_to_text.get(row["anchor_id"])
+    positive = id_to_text.get(row["positive_id"])
+    negative = id_to_text.get(row["negative_id"])
+    
+    if anchor and positive and negative:  # skip nếu có id bị missing
+        train_examples.append(InputExample(texts=[anchor, positive, negative]))
 
-sentence_features = [features_anchor, features_positive, features_negative]
+print(f"Training examples: {len(train_examples)}")
 
-loss_fn = losses.TripletLoss(model=model)
+# Train
+model = SentenceTransformer('all-MiniLM-L6-v2')
+train_dataloader = DataLoader(train_examples, shuffle=True, batch_size=16)
+train_loss = losses.TripletLoss(
+    model,
+    distance_metric=losses.TripletDistanceMetric.COSINE,
+    triplet_margin=0.5
+)
 
-# labels không dùng cho TripletLoss nhưng API yêu cầu vẫn pass vào
-loss_value = loss_fn(sentence_features, labels=None)
-
-print(loss_value.item())
+model.fit(
+    train_objectives=[(train_dataloader, train_loss)],
+    epochs=3,
+    warmup_steps=100,
+    output_path='finetune_BERT/model_checkpoint/finetuned-arxiv-sbert'
+)

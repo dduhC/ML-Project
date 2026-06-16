@@ -5,20 +5,21 @@ import faiss
 import pickle
 import random
 from collections import defaultdict
+from tqdm import tqdm
 
 # ─────────────────────────────────────────────
 # 1. Load embeddings và metadata
 # ─────────────────────────────────────────────
 
-sbert_embeddings = np.load("SBERTEmbeddings.npy")  #?: shape (N, 384), đã L2-normalize
-tfidf_embeddings = np.load("TfidfEmbeddings.npy")  #?: shape (N, 256), đã L2-normalize
-tfidf_sparse     = sp.load_npz("TfidfSparse.npz")  #?: sparse (N, vocab), dùng để tính raw TF-IDF similarity nếu cần
+sbert_embeddings = np.load("finetune_BERT/SBERTEmbeddings.npy")  #?: shape (N, 384), đã L2-normalize
+tfidf_embeddings = np.load("finetune_BERT/TfidfEmbeddings.npy")  #?: shape (N, 256), đã L2-normalize
+tfidf_sparse     = sp.load_npz("finetune_BERT/TfidfSparse.npz")  #?: sparse (N, vocab), dùng để tính raw TF-IDF similarity nếu cần
 
-paper_id_order = pd.read_csv("paper_id_order.csv")  #?: ánh xạ row index → paper_id
+paper_id_order = pd.read_csv("finetune_BERT/paper_id_order.csv")  #?: ánh xạ row index → paper_id
 df = pd.read_csv("./data/train.csv").reset_index(drop=True)
 #! df phải reset_index và giữ đúng thứ tự như lúc encode — không được shuffle hay filter sau bước này
 
-with open("tfidf_vectorizer.pkl", "rb") as f:
+with open("finetune_BERT/tfidf_vectorizer.pkl", "rb") as f:
     tfidf_vectorizer = pickle.load(f)
 
 n = len(df)
@@ -50,19 +51,20 @@ author_to_indices = defaultdict(list)
 for i, row in df.iterrows():
     author_to_indices[row["first_author"]].append(i)
 
+# print(category_to_indices["cs.CV"][:20])
 # ─────────────────────────────────────────────
 # 4. Config
 # ─────────────────────────────────────────────
 
 K_NEIGHBORS      = 50    #?: lấy dư neighbor để sau filter còn đủ candidate
 SBERT_POS3_THRESH = 0.85 #?: threshold cao cho cross-category positive — chỉ lấy cặp thực sự gần
-N_ANCHORS        = 30000 #?: sample subset anchor, không cần tất cả 130k
-RATIO_POS1       = 0.40  #?: category + TF-IDF cao
-RATIO_POS2       = 0.30  #?: author + category
-RATIO_POS3       = 0.15  #?: cross-category SBERT
-RATIO_NEG1       = 0.30  #?: hard negative: TF-IDF gần nhưng khác category
-RATIO_NEG2       = 0.10  #?: easy negative: random sample
-RATIO_NEG3       = 0.30  #?: same-category hard negative: cùng category nhưng TF-IDF thấp
+N_ANCHORS        = 50000 #?: sample subset anchor, không cần tất cả 130k
+RATIO_POS1 = 0.80
+RATIO_POS2 = 0.60
+RATIO_POS3 = 0.30
+RATIO_NEG1 = 0.70
+RATIO_NEG2 = 0.40
+RATIO_NEG3 = 0.60
 #! tổng ratio positive và negative không cần bằng nhau — mỗi bên normalize riêng khi sample
 
 # ─────────────────────────────────────────────
@@ -189,7 +191,7 @@ anchor_indices = sample_anchors_by_category(df, N_ANCHORS)
 
 triplets = []
 
-for anchor_idx in anchor_indices:
+for anchor_idx in tqdm(anchor_indices, desc="Generating triplets"):
     anchor_paper_id = df.iloc[anchor_idx]["paper_id"]
 
     # --- positive candidates theo từng strategy ---
@@ -246,7 +248,7 @@ print(f"Generated {len(triplets)} triplets")
 # ─────────────────────────────────────────────
 
 triplets_df = pd.DataFrame(triplets)
-triplets_df.to_csv("triplets.csv", index=False)
+triplets_df.to_csv(f"finetune_BERT/triplets_{len(triplets)}.csv", index=False)
 print("Saved triplets.csv")
 print(triplets_df["pos_strategy"].value_counts())
 print(triplets_df["neg_strategy"].value_counts())

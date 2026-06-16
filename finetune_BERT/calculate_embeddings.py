@@ -25,22 +25,28 @@ import pickle
 # ------------------------------------------------------------------
 # 1. Load data
 # ------------------------------------------------------------------
-df = pd.read_csv("finetune_BERT/train_content.csv")  # must have columns: paper_id, content
-print(df.head())
-df = df.reset_index(drop=True)  # CRITICAL: ensures array row i <-> df.iloc[i]
+
+def make_content_df(df: pd.DataFrame) -> pd.DataFrame:
+    content = df['title'] + " " + df['primary_category'] + " " + df['abstract']
+    return pd.DataFrame({'paper_id': df['paper_id'], 'content': content})
+
+df = pd.read_csv("data/train.csv")
+
+df = make_content_df(df)
 
 texts = df["content"].tolist()
 n = len(texts)
 print(f"Loaded {n} documents")
 
 # Save paper_id order for later lookup (embeddings[i] <-> paper_id_order.iloc[i])
-df[["paper_id"]].to_csv("paper_id_order.csv", index=False)
+df[["paper_id"]].to_csv("finetune_BERT/paper_id_order.csv", index=False)
 
 # ------------------------------------------------------------------
 # 2. SBERT embeddings
 # ------------------------------------------------------------------
 print("Encoding SBERT embeddings...")
 model = SentenceTransformer("all-MiniLM-L6-v2")
+print(model.device)
 sbert_embeddings = model.encode(
     texts,
     batch_size=64,
@@ -51,7 +57,7 @@ sbert_embeddings = model.encode(
 # Normalize so inner product == cosine similarity (for FAISS IndexFlatIP)
 faiss.normalize_L2(sbert_embeddings)
 sbert_embeddings = sbert_embeddings.astype("float32")
-np.save("SBERTEmbeddings.npy", sbert_embeddings)
+np.save("finetune_BERT/SBERTEmbeddings.npy", sbert_embeddings)
 print(f"Saved SBERTEmbeddings.npy with shape {sbert_embeddings.shape}")
 
 # ------------------------------------------------------------------
@@ -66,9 +72,9 @@ tfidf_sparse = tfidf_vectorizer.fit_transform(texts)  # (N, vocab_size) sparse
 print(f"TF-IDF sparse matrix shape: {tfidf_sparse.shape}")
 
 # Save sparse matrix (for keyword-level overlap / explainability later)
-sp.save_npz("TfidfSparse.npz", tfidf_sparse)
+sp.save_npz("finetune_BERT/TfidfSparse.npz", tfidf_sparse)
 
-with open("tfidf_vectorizer.pkl", "wb") as f:
+with open("finetune_BERT/tfidf_vectorizer.pkl", "wb") as f:
     pickle.dump(tfidf_vectorizer, f)
 
 # Reduce dimensionality for FAISS (dense, manageable size)
@@ -77,12 +83,12 @@ n_components = 256
 svd = TruncatedSVD(n_components=n_components, random_state=42)
 tfidf_reduced = svd.fit_transform(tfidf_sparse)  # (N, 256) dense
 
+tfidf_reduced = np.ascontiguousarray(tfidf_reduced.astype("float32"))
 faiss.normalize_L2(tfidf_reduced)
-tfidf_reduced = tfidf_reduced.astype("float32")
-np.save("TfidfEmbeddings.npy", tfidf_reduced)
+np.save("finetune_BERT/TfidfEmbeddings.npy", tfidf_reduced)
 print(f"Saved TfidfEmbeddings.npy with shape {tfidf_reduced.shape}")
 
-with open("svd_model.pkl", "wb") as f:
+with open("finetune_BERT/svd_model.pkl", "wb") as f:
     pickle.dump(svd, f)
 
 print("Done.")

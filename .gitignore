@@ -8,3 +8,6 @@
 # Bỏ qua toàn bộ môi trường ảo (venv) - QUAN TRỌNG
 venv/
 .venv/
+*/*.npy
+*/model_checkpoint/*
+*.zip
