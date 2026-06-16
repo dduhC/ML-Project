@@ -153,7 +153,38 @@ def get_negative_same_cat_hard(anchor_idx):
 # 6. Generate triplets
 # ─────────────────────────────────────────────
 
-anchor_indices = random.sample(range(n), min(N_ANCHORS, n))
+
+def sample_anchors_by_category(df, n_anchors):
+    """
+    Select anchor documents using stratified sampling.
+    Each category gets a number of anchors proportional to its size in the dataset.
+    Minimum 10 anchors per category to avoid dropping rare categories.
+
+    Returns: list of row indices (in df) selected as anchors.
+    """
+
+    # Count documents per category and compute proportions
+    category_counts      = df['primary_category'].value_counts()
+    category_proportions = category_counts / len(df)
+
+    # Convert proportions to quota per category, with a floor of 10
+    category_quotas = (category_proportions * n_anchors).astype(int)
+    category_quotas = category_quotas.clip(lower=10)
+
+    # Randomly sample each category according to its quota
+    selected_indices = []
+    for category_name, quota in category_quotas.items():
+        all_indices_in_category = df[df['primary_category'] == category_name].index.tolist()
+        actual_quota            = min(len(all_indices_in_category), quota)
+        sampled                 = random.sample(all_indices_in_category, actual_quota)
+        selected_indices.extend(sampled)
+
+    # Shuffle so batches aren't biased toward any one category
+    random.shuffle(selected_indices)
+
+    return selected_indices
+
+anchor_indices = sample_anchors_by_category(df, N_ANCHORS)
 #? sample anchor subset — không cần tất cả 130k, 20-30k là đủ để train
 
 triplets = []

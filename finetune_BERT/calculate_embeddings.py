@@ -25,7 +25,7 @@ import pickle
 # ------------------------------------------------------------------
 # 1. Load data
 # ------------------------------------------------------------------
-df = pd.read_csv("./data/train.csv")  # must have columns: paper_id, content
+df = pd.read_csv("finetune_BERT/train_content.csv")  # must have columns: paper_id, content
 print(df.head())
 df = df.reset_index(drop=True)  # CRITICAL: ensures array row i <-> df.iloc[i]
 
