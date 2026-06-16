@@ -1,3 +1,10 @@
+# Các file dữ liệu nặng và cache
 *.csv
 *.npz
 *.pkl
+**/__pycache__/
+.DS_Store
+
+# Bỏ qua toàn bộ môi trường ảo (venv) - QUAN TRỌNG
+venv/
+.venv/
