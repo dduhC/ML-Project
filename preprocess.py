@@ -34,5 +34,13 @@ class TextPreprocessor:
     def transform(self, texts):
         preprocessed_texts = [self.preprocess(text) for text in texts]
         return self.vectorizer.transform(preprocessed_texts)
-    
+
+def create_data_input(df, columns):
+    result=[]
+    for id, row in df.iterrows():
+        tmp_text = [col+' : '+str(row[col]) for col in columns]
+        text = ' || '.join(tmp_text)
+        result.append(text)
+    return result
+
 preprocessor = TextPreprocessor()
