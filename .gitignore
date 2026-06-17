@@ -9,5 +9,4 @@
 venv/
 .venv/
 */*.npy
-*/model_checkpoint/*
 *.zip

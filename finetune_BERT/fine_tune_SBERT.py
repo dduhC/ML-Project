@@ -3,7 +3,7 @@ from torch.utils.data import DataLoader
 import pandas as pd
 
 # Load data
-triplets_df = pd.read_csv("finetune_BERT/triplets.csv")
+triplets_df = pd.read_csv("finetune_BERT/triplets_89059.csv")
 df = pd.read_csv("finetune_BERT/train_content.csv").reset_index(drop=True)
 
 # Map paper_id → text
@@ -34,5 +34,5 @@ model.fit(
     train_objectives=[(train_dataloader, train_loss)],
     epochs=3,
     warmup_steps=100,
-    output_path='finetune_BERT/model_checkpoint/finetuned-arxiv-sbert'
+    output_path='finetune_BERT/model_checkpoint/finetuned-arxiv-sbert_v2'
 )

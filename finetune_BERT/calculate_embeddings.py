@@ -33,6 +33,7 @@ def make_content_df(df: pd.DataFrame) -> pd.DataFrame:
 df = pd.read_csv("data/train.csv")
 
 df = make_content_df(df)
+df.to_csv("finetune_BERT/train_content.csv")
 
 texts = df["content"].tolist()
 n = len(texts)
