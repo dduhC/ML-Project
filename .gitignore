@@ -9,3 +9,4 @@
 venv/
 .venv/
 *.zip
+finetune_BERT/TfidfEmbeddings.npy
