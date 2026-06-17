@@ -1,0 +1,7 @@
+{
+  "alpha": 0.7,
+  "half_life": 90,
+  "total_users": 1000,
+  "top_k_kept": 10,
+  "formula": "final_score = alpha * cosine_sim + (1-alpha) * recency_score"
+}

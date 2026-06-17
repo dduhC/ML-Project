@@ -1,0 +1,10 @@
+Half-life: 90 days
+Number of users: 1000
+Vector dimension: 384
+
+Vector L2 Norm Statistics:
+  min    : 0.148986
+  max    : 0.933409
+  mean   : 0.348771
+  median : 0.309973
+  std    : 0.130331

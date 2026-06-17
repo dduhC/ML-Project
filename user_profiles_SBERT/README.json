@@ -1,0 +1,32 @@
+{
+  "description": "Temporal-weighted user profile vectors",
+  "formula": "weight(p) = exp(-log(2) * days_since_read(p) / half_life)",
+  "user_vector": "weighted_mean(embeddings, weights)",
+  "half_lives_evaluated": [
+    30,
+    60,
+    90
+  ],
+  "total_users": 1000,
+  "SBERT_matrix_shape": [
+    136238,
+    384
+  ],
+  "files_generated": {
+    "30": {
+      "vectors": "user_profiles_SBERT/user_vectors_halflife_30.npz",
+      "metadata": "user_profiles_SBERT/user_metadata_halflife_30.json",
+      "stats": "user_profiles_SBERT/summary_stats_halflife_30.txt"
+    },
+    "60": {
+      "vectors": "user_profiles_SBERT/user_vectors_halflife_60.npz",
+      "metadata": "user_profiles_SBERT/user_metadata_halflife_60.json",
+      "stats": "user_profiles_SBERT/summary_stats_halflife_60.txt"
+    },
+    "90": {
+      "vectors": "user_profiles_SBERT/user_vectors_halflife_90.npz",
+      "metadata": "user_profiles_SBERT/user_metadata_halflife_90.json",
+      "stats": "user_profiles_SBERT/summary_stats_halflife_90.txt"
+    }
+  }
+}
