@@ -1,3 +1,5 @@
 *.csv
 *.npz
 *.pkl
+venv/*
+.DS_Store
