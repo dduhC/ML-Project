@@ -3,3 +3,4 @@
 venv/*
 .DS_Store
 arxiv_dataset\SBERTEmbeddings_final.npy
+arxiv_dataset/SBERTEmbeddings_final.npy
