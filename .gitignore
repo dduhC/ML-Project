@@ -2,6 +2,11 @@
 *.pkl
 venv/*
 .DS_Store
-arxiv_dataset\SBERTEmbeddings_final.npy
+arxiv_dataset/SBERTEmbeddings.npy
 arxiv_dataset/SBERTEmbeddings_final.npy
+arxiv_dataset/SBERTEmbeddings_test.npy
+arxiv_dataset/SBERTEmbeddings_test_final.npy
 arxiv_dataset/tfidf_matrix.npz
+*/__pycache__/*
+__pycache__/*
+*.docx
