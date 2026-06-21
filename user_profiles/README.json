@@ -2,6 +2,7 @@
   "description": "Temporal-weighted user profile vectors",
   "formula": "weight(p) = exp(-log(2) * days_since_read(p) / half_life)",
   "user_vector": "weighted_mean(embeddings, weights)",
+  "paper_index_mapping": "arxiv_dataset/train.csv row order",
   "half_lives_evaluated": [
     30,
     60,
