@@ -2,8 +2,10 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import json
+import matplotlib.pyplot as plt
 from sklearn.metrics.pairwise import cosine_similarity
 from cold_start import build_cold_start_profile
+from user_tsne import create_user_profile_tsne
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -89,7 +91,10 @@ def get_recommendations(user_vector, history_paper_ids, top_k=10):
     rec_df['hybrid_score'] = [final_scores[i] for i in selected_indices]
     rec_df['Rank'] = range(1, len(selected_indices) + 1)
     
-    return rec_df[['Rank', 'paper_id', 'title', 'primary_category', 'hybrid_score']]
+    return (
+        rec_df[['Rank', 'paper_id', 'title', 'primary_category', 'hybrid_score']],
+        np.asarray(selected_indices, dtype=np.int64),
+    )
 
 st.title("📚 Personalized ArXiv Paper Recommender")
 st.markdown("A hybrid recommendation system utilizing SBERT embeddings, temporal weighting, and MMR diversification.")
@@ -114,8 +119,31 @@ if user_type == "Existing User":
             st.dataframe(history_df[['paper_id', 'title', 'primary_category']], use_container_width=True)
             
             st.markdown(f"### 🎯 Top 10 Recommendations for `{selected_user_id}`")
-            recs = get_recommendations(user_vec, history_ids)
+            recs, recommendation_indices = get_recommendations(
+                user_vec, history_ids
+            )
             st.dataframe(recs, use_container_width=True)
+
+            history_indices = [
+                paper_id_to_idx[paper_id]
+                for paper_id in history_ids
+                if paper_id in paper_id_to_idx
+            ]
+            figure = create_user_profile_tsne(
+                df=df,
+                embeddings=sbert_embeddings,
+                user_vector=user_vec,
+                recommendation_indices=recommendation_indices,
+                context_indices=history_indices,
+                context_label="Reading history",
+            )
+            st.markdown("### User Profile and Recommendations in t-SNE Space")
+            st.pyplot(figure, width="stretch")
+            plt.close(figure)
+            st.caption(
+                "t-SNE is a qualitative visualization; distances can be "
+                "distorted and are not used as an evaluation metric."
+            )
 
 else:
     st.subheader("Cold-Start Category Onboarding")
@@ -148,5 +176,23 @@ else:
                 st.caption(f"Profile initialized from {seed_summary} recent papers.")
                 
                 st.markdown("### 🎯 Top 10 Recommendations for You")
-                recs = get_recommendations(pseudo_vec, history_paper_ids=[])
+                recs, recommendation_indices = get_recommendations(
+                    pseudo_vec, history_paper_ids=[]
+                )
                 st.dataframe(recs, use_container_width=True)
+
+                figure = create_user_profile_tsne(
+                    df=df,
+                    embeddings=sbert_embeddings,
+                    user_vector=pseudo_vec,
+                    recommendation_indices=recommendation_indices,
+                    context_indices=seed_indices,
+                    context_label="Cold-start seed papers",
+                )
+                st.markdown("### User Profile and Recommendations in t-SNE Space")
+                st.pyplot(figure, width="stretch")
+                plt.close(figure)
+                st.caption(
+                    "t-SNE is a qualitative visualization; distances can be "
+                    "distorted and are not used as an evaluation metric."
+                )
