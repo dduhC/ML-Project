@@ -10,3 +10,5 @@ arxiv_dataset/tfidf_matrix.npz
 */__pycache__/*
 __pycache__/*
 *.docx
+AGENTS.md
+docs/proposal.md

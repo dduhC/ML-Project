@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import json
 from sklearn.metrics.pairwise import cosine_similarity
+from cold_start import build_cold_start_profile
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -128,13 +129,23 @@ else:
             st.error("Please select at least one category to continue.")
         else:
             with st.spinner("Bootstrapping profile and computing hybrid scores..."):
-                # Bootstrap profile vector
-                cat_df = df[df['primary_category'].isin(selected_cats)]
-                # Get the 10 most recent/popular papers in the chosen categories
-                top_recent_idx = cat_df.sort_values(by='recency_score', ascending=False).head(10).index
-                
-                # Average embeddings
-                pseudo_vec = np.mean(sbert_embeddings[top_recent_idx], axis=0)
+                pseudo_vec, seed_indices = build_cold_start_profile(
+                    df,
+                    sbert_embeddings,
+                    selected_cats,
+                    papers_per_category=20,
+                )
+
+                seed_counts = (
+                    df.iloc[seed_indices]['primary_category']
+                    .value_counts()
+                    .reindex(selected_cats, fill_value=0)
+                )
+                seed_summary = ", ".join(
+                    f"{category}: {count}"
+                    for category, count in seed_counts.items()
+                )
+                st.caption(f"Profile initialized from {seed_summary} recent papers.")
                 
                 st.markdown("### 🎯 Top 10 Recommendations for You")
                 recs = get_recommendations(pseudo_vec, history_paper_ids=[])
