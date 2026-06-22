@@ -17,9 +17,7 @@ from evaluate_representations import (  # noqa: E402
     build_user_profile,
     category_precision_at_k,
     evaluate_representation,
-    hit_rate_at_k,
     intra_list_diversity,
-    ndcg_at_k,
     rank_candidates,
     semantic_coherence_at_k,
     summarize_metrics,
@@ -27,12 +25,10 @@ from evaluate_representations import (  # noqa: E402
 
 
 class MetricTests(unittest.TestCase):
-    def test_ranking_metrics_match_known_values(self):
+    def test_category_precision_matches_known_value(self):
         ranked = np.array([4, 2, 3, 0, 1])
         categories = np.array(["A", "B", "A", "C", "A"])
 
-        self.assertEqual(hit_rate_at_k(ranked, target_index=2, k=2), 1.0)
-        self.assertAlmostEqual(ndcg_at_k(ranked, target_index=2, k=2), 1 / np.log2(3))
         self.assertAlmostEqual(
             category_precision_at_k(ranked, categories, {"A"}, k=3),
             2 / 3,

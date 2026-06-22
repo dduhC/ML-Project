@@ -6,7 +6,8 @@ arxiv_dataset/SBERTEmbeddings_final.npy
 arxiv_dataset/SBERTEmbeddings_test.npy
 arxiv_dataset/SBERTEmbeddings_test_final.npy
 arxiv_dataset/tfidf_matrix.npz
-*/__pycache__/*
+eval/tests/__pycache__/*
+*.pyc
 __pycache__/*
 *.docx
 AGENTS.md

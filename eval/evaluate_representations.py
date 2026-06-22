@@ -113,17 +113,6 @@ def category_precision_at_k(
     )
 
 
-def hit_rate_at_k(
-    ranked_indices: Sequence[int], target_index: int, k: int
-) -> float:
-    return float(target_index in ranked_indices[:k])
-
-
-def ndcg_at_k(ranked_indices: Sequence[int], target_index: int, k: int) -> float:
-    positions = np.flatnonzero(np.asarray(ranked_indices[:k]) == target_index)
-    return 0.0 if not len(positions) else float(1 / np.log2(positions[0] + 2))
-
-
 def semantic_coherence_at_k(
     similarities: np.ndarray, ranked_indices: Sequence[int], k: int
 ) -> float:
@@ -159,7 +148,6 @@ def evaluate_representation(
             for paper_id, _ in user["train_history"]
         ]
         days_ago = [days for _, days in user["train_history"]]
-        target_index = paper_id_to_index[user["target_paper"]]
         relevant_categories = set(categories[history_indices])
 
         started = time.perf_counter()
@@ -190,8 +178,6 @@ def evaluate_representation(
                     "category_precision": category_precision_at_k(
                         ranked, categories, relevant_categories, k
                     ),
-                    "ndcg": ndcg_at_k(ranked, target_index, k),
-                    "hit_rate": hit_rate_at_k(ranked, target_index, k),
                     "semantic_coherence": semantic_coherence_at_k(
                         similarities, ranked, k
                     ),
@@ -208,8 +194,6 @@ def evaluate_representation(
 def summarize_metrics(per_user: pd.DataFrame) -> pd.DataFrame:
     metrics = [
         "category_precision",
-        "ndcg",
-        "hit_rate",
         "semantic_coherence",
         "ild",
         "profile_seconds",
@@ -251,15 +235,13 @@ def create_metrics_chart(
 ) -> None:
     plots = [
         ("category_precision_mean", "Category Precision@K"),
-        ("ndcg_mean", "NDCG@K"),
-        ("hit_rate_mean", "Hit Rate@K"),
         ("semantic_coherence_mean", "Semantic Coherence"),
         ("ild_mean", "Intra-list Diversity"),
     ]
     models = summary["representation"].unique()
     k_values = sorted(summary["k"].unique())
     x = np.arange(len(k_values))
-    figure, axes = plt.subplots(2, 3, figsize=(18, 10))
+    figure, axes = plt.subplots(2, 2, figsize=(14, 10))
     axes = axes.ravel()
     colors = plt.rcParams["axes.prop_cycle"].by_key()["color"][: len(models)]
 
@@ -277,7 +259,7 @@ def create_metrics_chart(
         axis.set_xticks(x, [f"K={k}" for k in k_values])
         axis.grid(axis="y", alpha=0.25)
 
-    silhouette_axis = axes[-1]
+    silhouette_axis = axes[3]
     silhouette_values = [silhouette_scores[model] for model in models]
     silhouette_axis.bar(
         np.arange(len(models)),
@@ -404,8 +386,6 @@ def write_outputs(
         "representation",
         "k",
         "category_precision_mean",
-        "ndcg_mean",
-        "hit_rate_mean",
         "semantic_coherence_mean",
         "ild_mean",
     ]
