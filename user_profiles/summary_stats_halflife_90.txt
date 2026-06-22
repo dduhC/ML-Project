@@ -3,8 +3,8 @@ Number of users: 1000
 Vector dimension: 10000
 
 Vector L2 Norm Statistics:
-  min    : 0.198256
-  max    : 0.773250
-  mean   : 0.326673
-  median : 0.283404
-  std    : 0.126437
+  min    : 0.202474
+  max    : 0.803770
+  mean   : 0.331666
+  median : 0.290149
+  std    : 0.125341

@@ -2,26 +2,19 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import json
-import scipy.sparse
-import joblib
+import matplotlib.pyplot as plt
 from sklearn.metrics.pairwise import cosine_similarity
-from preprocess import TextPreprocessor
+from cold_start import build_cold_start_profile
+from user_tsne import create_user_profile_tsne
 import warnings
 warnings.filterwarnings('ignore')
 
+# --- CONFIG ---
 st.set_page_config(page_title="ArXiv Recommender", page_icon="📚", layout="wide")
 
-LAMBDA_PARAM = 0.7
+ALPHA = 0.7
 HALF_LIFE = 90
-
-@st.cache_resource(show_spinner=False)
-def load_models():
-    # Cache busted to reload the 3-feature model
-    ltr_model = joblib.load('ltr_model.pkl')
-    preprocessor = joblib.load('arxiv_dataset/text_preprocessor.pkl')
-    tfidf_matrix = scipy.sparse.load_npz('arxiv_dataset/tfidf_matrix.npz')
-    feature_names = preprocessor.vectorizer.get_feature_names_out()
-    return ltr_model, tfidf_matrix, feature_names
+LAMBDA_PARAM = 0.7
 
 @st.cache_data
 def load_data():
@@ -39,24 +32,16 @@ def load_data():
         
     return df, sbert_embeddings, synthetic_users, users_vector, user_metadata
 
-# Load everything
 df, sbert_embeddings, synthetic_users, users_vector, user_metadata = load_data()
-ltr_model, tfidf_matrix, feature_names = load_models()
 
 paper_ids = df['paper_id'].values
 paper_id_to_idx = {pid: i for i, pid in enumerate(paper_ids)}
-paper_to_cat = pd.Series(df['primary_category'].values, index=df['paper_id']).to_dict()
-
 recency_scores = df['recency_score'].values
-
-def get_keywords(paper_idx):
-    row = tfidf_matrix[paper_idx].toarray()[0]
-    top_idx = np.argsort(row)[::-1][:5]
-    return ", ".join([feature_names[i] for i in top_idx if row[i] > 0])
 
 def mmr_rerank(candidate_indices, relevance_scores, embeddings, top_k=10, lambda_param=0.7):
     selected = []
     remaining = list(candidate_indices)
+
     while len(selected) < top_k and remaining:
         if not selected:
             best_idx = remaining[int(np.argmax([relevance_scores[i] for i in remaining]))]
@@ -69,39 +54,31 @@ def mmr_rerank(candidate_indices, relevance_scores, embeddings, top_k=10, lambda
                 redundancy = sims.max()
                 mmr_scores.append(lambda_param * relevance - (1 - lambda_param) * redundancy)
             best_idx = remaining[int(np.argmax(mmr_scores))]
+
         selected.append(best_idx)
         remaining.remove(best_idx)
+
     return selected
 
-def get_explainable_recommendations(user_vector, history_paper_ids, top_k=10):
+def get_recommendations(user_vector, history_paper_ids, top_k=10):
+    # final_score = alpha * cosine_sim + (1 - alpha) * recency_score
+    cos_scores = cosine_similarity(user_vector.reshape(1, -1), sbert_embeddings).flatten()
+    final_scores = ALPHA * cos_scores + (1 - ALPHA) * recency_scores
+    
+    # filter history
     history_indices = set(paper_id_to_idx[pid] for pid in history_paper_ids if pid in paper_id_to_idx)
-    user_his_cat = set()
-    for pid in history_paper_ids:
-        if pid in paper_to_cat:
-            user_his_cat.add(paper_to_cat[pid])
-            
-    # Pool all candidates (exclude history)
+    
+    # Pre-filter top pool_size candidates
+    pool_size = 100
     valid_indices = [i for i in range(len(paper_ids)) if i not in history_indices]
     
-    # Calculate features for LTR
-    cand_embeds = sbert_embeddings[valid_indices]
-    cos_sims = cosine_similarity(user_vector.reshape(1, -1), cand_embeds).flatten()
-    recs = recency_scores[valid_indices]
-    cat_matches = [int(paper_to_cat.get(paper_ids[i], '') in user_his_cat) for i in valid_indices]
+    valid_scores = final_scores[valid_indices]
+    top_pool_valid_idx = np.argsort(valid_scores)[::-1][:pool_size]
     
-    # Filter top 100 via basic hybrid heuristic before LTR (to save time), or just predict all
-    # To keep it rigorous, predict all with LTR:
-    X_candidates = np.column_stack((cos_sims, recs, cat_matches))
-    ltr_probs = ltr_model.predict_proba(X_candidates)[:, 1]
+    pool_indices = [valid_indices[i] for i in top_pool_valid_idx]
+    relevance_dict = {idx: final_scores[idx] for idx in pool_indices}
     
-    # Select top 100 for MMR
-    pool_size = 100
-    top_100_idx_in_valid = np.argsort(ltr_probs)[::-1][:pool_size]
-    
-    pool_indices = [valid_indices[i] for i in top_100_idx_in_valid]
-    relevance_dict = {idx: ltr_probs[i] for i, idx in zip(top_100_idx_in_valid, pool_indices)}
-    
-    # MMR
+    # Apply MMR
     selected_indices = mmr_rerank(
         candidate_indices=pool_indices,
         relevance_scores=relevance_dict,
@@ -110,45 +87,30 @@ def get_explainable_recommendations(user_vector, history_paper_ids, top_k=10):
         lambda_param=LAMBDA_PARAM
     )
     
-    # Build explanation table
-    recs_list = []
-    for rank, idx in enumerate(selected_indices, start=1):
-        pid = paper_ids[idx]
-        
-        # We need the original index inside valid_indices to extract feature values
-        v_i = valid_indices.index(idx)
-        
-        sim_score = cos_sims[v_i]
-        rec_score = recs[v_i]
-        ltr_score = ltr_probs[v_i]
-        kw = get_keywords(idx)
-        
-        recs_list.append({
-            'Rank': rank,
-            'Paper ID': pid,
-            'Title': df.iloc[idx]['title'],
-            'Category': df.iloc[idx]['primary_category'],
-            'TF-IDF Keywords': kw,
-            'LTR Score': round(ltr_score, 4),
-            'Semantic Similarity': round(sim_score, 4),
-            'Recency Score': round(rec_score, 4)
-        })
-        
-    return pd.DataFrame(recs_list)
+    rec_df = df.iloc[selected_indices].copy()
+    rec_df['hybrid_score'] = [final_scores[i] for i in selected_indices]
+    rec_df['Rank'] = range(1, len(selected_indices) + 1)
+    
+    return (
+        rec_df[['Rank', 'paper_id', 'title', 'primary_category', 'hybrid_score']],
+        np.asarray(selected_indices, dtype=np.int64),
+    )
 
 st.title("📚 Personalized ArXiv Paper Recommender")
-st.markdown("A recommendation system featuring LTR (Gradient Boosting), MMR Diversification, and Explainable AI.")
+st.markdown("A hybrid recommendation system utilizing SBERT embeddings, temporal weighting, and MMR diversification.")
 
 user_type = st.radio("Select User Type:", ["Existing User", "New User (Cold Start)"], horizontal=True)
 
 if user_type == "Existing User":
+    st.subheader("Select an Existing User")
     user_choices = [u['user_id'] for u in user_metadata]
-    selected_user_id = st.selectbox("Select User:", user_choices)
+    selected_user_id = st.selectbox("User ID:", user_choices)
     
-    if st.button("Generate Explainable Recommendations", type="primary"):
-        with st.spinner("Executing LTR Pipeline and Explanations..."):
+    if st.button("Generate Recommendations", type="primary"):
+        with st.spinner("Analyzing user profile and computing hybrid scores..."):
             user_idx = user_choices.index(selected_user_id)
             user_vec = users_vector[user_idx]
+            
             synth_user = next((u for u in synthetic_users if u['user_id'] == selected_user_id), None)
             history_ids = [x[0] for x in synth_user['train_history']] if synth_user else []
             
@@ -156,36 +118,81 @@ if user_type == "Existing User":
             history_df = df[df['paper_id'].isin(history_ids)]
             st.dataframe(history_df[['paper_id', 'title', 'primary_category']], use_container_width=True)
             
-            st.markdown(f"### 🎯 Top 10 Recommendations & Explanations")
-            recs_df = get_explainable_recommendations(user_vec, history_ids)
-            st.dataframe(recs_df, use_container_width=True)
-            
-            # Show feature importances from LTR model
-            st.markdown("#### 🧠 LTR Model Feature Importance Breakdown")
-            fi = ltr_model.feature_importances_
-            fi_df = pd.DataFrame({
-                "Feature": ["Cosine Similarity", "Recency Score", "Category Match"],
-                "Importance Weight": [f"{v*100:.2f}%" for v in fi]
-            })
-            st.table(fi_df)
+            st.markdown(f"### 🎯 Top 10 Recommendations for {selected_user_id}")
+            recs, recommendation_indices = get_recommendations(
+                user_vec, history_ids
+            )
+            st.dataframe(recs, use_container_width=True)
+
+            history_indices = [
+                paper_id_to_idx[paper_id]
+                for paper_id in history_ids
+                if paper_id in paper_id_to_idx
+            ]
+            figure = create_user_profile_tsne(
+                df=df,
+                embeddings=sbert_embeddings,
+                user_vector=user_vec,
+                recommendation_indices=recommendation_indices,
+                context_indices=history_indices,
+                context_label="Reading history",
+            )
+            st.markdown("### User Profile and Recommendations in t-SNE Space")
+            st.pyplot(figure, width="stretch")
+            plt.close(figure)
+            st.caption(
+                "t-SNE is a qualitative visualization; distances can be "
+                "distorted and are not used as an evaluation metric."
+            )
 
 else:
     st.subheader("Cold-Start Category Onboarding")
+    st.markdown("Select 1 to 3 categories that interest you to bootstrap your profile.")
+    
     all_categories = sorted(df['primary_category'].dropna().unique())
     selected_cats = st.multiselect("Favorite Categories:", all_categories, max_selections=3)
     
-    if st.button("Generate Explainable Recommendations", type="primary"):
+    if st.button("Generate Recommendations", type="primary"):
         if not selected_cats:
-            st.error("Please select at least one category.")
+            st.error("Please select at least one category to continue.")
         else:
-            with st.spinner("Bootstrapping profile..."):
-                cat_df = df[df['primary_category'].isin(selected_cats)]
-                top_recent_idx = cat_df.sort_values(by='recency_score', ascending=False).head(10).index
-                pseudo_vec = np.mean(sbert_embeddings[top_recent_idx], axis=0)
+            with st.spinner("Bootstrapping profile and computing hybrid scores..."):
+                pseudo_vec, seed_indices = build_cold_start_profile(
+                    df,
+                    sbert_embeddings,
+                    selected_cats,
+                    papers_per_category=20,
+                )
+
+                seed_counts = (
+                    df.iloc[seed_indices]['primary_category']
+                    .value_counts()
+                    .reindex(selected_cats, fill_value=0)
+                )
+                seed_summary = ", ".join(
+                    f"{category}: {count}"
+                    for category, count in seed_counts.items()
+                )
+                st.caption(f"Profile initialized from {seed_summary} recent papers.")
                 
-                # Treat top_recent_idx as "history" to set categories
-                pseudo_history = df.iloc[top_recent_idx]['paper_id'].tolist()
-                
-                st.markdown("### 🎯 Top 10 Recommendations & Explanations")
-                recs_df = get_explainable_recommendations(pseudo_vec, pseudo_history)
-                st.dataframe(recs_df, use_container_width=True)
+                st.markdown("### 🎯 Top 10 Recommendations for You")
+                recs, recommendation_indices = get_recommendations(
+                    pseudo_vec, history_paper_ids=[]
+                )
+                st.dataframe(recs, use_container_width=True)
+
+                figure = create_user_profile_tsne(
+                    df=df,
+                    embeddings=sbert_embeddings,
+                    user_vector=pseudo_vec,
+                    recommendation_indices=recommendation_indices,
+                    context_indices=seed_indices,
+                    context_label="Cold-start seed papers",
+                )
+                st.markdown("### User Profile and Recommendations in t-SNE Space")
+                st.pyplot(figure, width="stretch")
+                plt.close(figure)
+                st.caption(
+                    "t-SNE is a qualitative visualization; distances can be "
+                    "distorted and are not used as an evaluation metric."
+                )
