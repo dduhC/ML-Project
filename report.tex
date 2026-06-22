@@ -1,0 +1,626 @@
+\documentclass[12pt,a4paper]{article}
+
+% ---------------------------------------------------------------------------
+% Personalized Research Paper Recommendation System -- Project Report
+% Style mirrors the provided sample report (article class, Computer Modern,
+% numbered sections, simple ruled tables).
+% ---------------------------------------------------------------------------
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[english]{babel}
+\usepackage{lmodern}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{enumitem}
+\usepackage{caption}
+\usepackage{float}
+\usepackage{xcolor}
+\usepackage[hidelinks]{hyperref}
+
+\captionsetup{font=small,labelfont=bf}
+\setlength{\parskip}{0.4em}
+\setlength{\parindent}{0pt}
+\renewcommand{\arraystretch}{1.25}
+
+% Safe figure inclusion: if the image file is missing, draw a labelled
+% placeholder box so the document always compiles inside or outside the repo.
+\newcommand{\safefigure}[3]{%
+  % #1 = path, #2 = caption, #3 = label
+  \begin{figure}[H]
+    \centering
+    \IfFileExists{#1}{%
+      \includegraphics[width=0.85\linewidth]{#1}%
+    }{%
+      \fbox{\parbox[c][4.5cm][c]{0.85\linewidth}{\centering\itshape
+        Figure placeholder --- expected image:\\\texttt{\detokenize{#1}}\\[2pt]
+        (rendered when compiled inside the project repository)}}%
+    }
+    \caption{#2}\label{#3}
+  \end{figure}
+}
+
+\title{\bfseries Personalized Research Paper Recommendation System\\[6pt]
+\large with Temporal Scoring, Diversity-aware Ranking,\\
+Learned Ranking, and Fine-tuned Semantic Embeddings\\[10pt]
+\normalsize Machine Learning Project Report --- IT3190E}
+\author{}
+\date{June 22, 2026}
+
+\begin{document}
+\maketitle
+\thispagestyle{empty}
+
+% ===========================================================================
+\section{Introduction}
+
+\subsection{General Overview}
+This project builds a personalized, content-based recommendation system for
+research papers that combines semantic NLP embeddings with temporal awareness
+and diversity-conscious ranking. The system models a user's research interests
+from their reading history and then returns recommendations that are
+simultaneously relevant, recent, and non-redundant.
+
+The central idea is that a good recommendation balances three factors: the
+\emph{semantic relevance} of a paper to the user's interests, the
+\emph{recency} of its publication, and the \emph{topical diversity} of the
+returned list. The system addresses all three through a hybrid scoring
+pipeline built on Sentence-BERT (SBERT) embeddings, exponential temporal
+scoring, and the Maximal Marginal Relevance (MMR) algorithm.
+
+Beyond a baseline retrieval pipeline, the project introduces two learned
+components that lift the system beyond plain similarity search:
+\begin{itemize}[leftmargin=1.4em]
+  \item \textbf{Learning-to-Rank (LTR):} a Gradient Boosting model that learns
+  how to combine ranking signals instead of hard-coding weighting parameters.
+  \item \textbf{Fine-tuned SBERT:} domain-adapted embeddings produced by
+  contrastive learning on arXiv papers, so that papers with similar content
+  are closer in embedding space.
+\end{itemize}
+
+\subsection{Problem Statement}
+Given a corpus of research papers and a user described only by an implicit
+reading history, how can the system rank papers so that the top results are
+relevant to the user's current interests, favour recently published work, and
+avoid returning near-duplicate items? No single fixed scoring rule is optimal:
+pure semantic similarity ignores recency and tends to produce redundant lists,
+while naive recency ignores meaning. The pipeline therefore composes several
+complementary signals and a learned ranker.
+
+\subsection{Project Objectives}
+The main objectives, following the project proposal, are to:
+\begin{enumerate}[leftmargin=1.6em]
+  \item Build a content-based recommendation system with semantic understanding
+  of paper abstracts.
+  \item Model user interests from reading history as a temporally-weighted
+  embedding profile.
+  \item Implement and compare TF-IDF, pretrained SBERT, and fine-tuned SBERT
+  representations.
+  \item Incorporate publication recency into the recommendation score via
+  exponential decay.
+  \item Improve recommendation diversity with Maximal Marginal Relevance.
+  \item Train a Learning-to-Rank model that learns ranking signals from
+  simulated interactions.
+  \item Fine-tune SBERT through contrastive learning on arXiv papers.
+  \item Handle cold-start users through category onboarding.
+  \item Evaluate using Precision@K, NDCG@K, Intra-list Diversity, and Semantic
+  Coherence.
+\end{enumerate}
+
+The proposed pipeline is summarised below:
+\begin{center}
+\fbox{\parbox{0.9\linewidth}{\ttfamily\small
+Preprocessing\\
+\hspace*{1em}$\rightarrow$ TF-IDF / SBERT / Fine-tuned SBERT\\
+\hspace*{1em}$\rightarrow$ Temporal-weighted user profile\\
+\hspace*{1em}$\rightarrow$ Hybrid scoring or Learning-to-Rank\\
+\hspace*{1em}$\rightarrow$ MMR reranking\\
+\hspace*{1em}$\rightarrow$ Explainable Top-K recommendations}}
+\end{center}
+
+% ===========================================================================
+\section{Dataset}
+
+The proposal targets a corpus of 7{,}701 AI/ML arXiv papers spanning
+September~2025 to April~2026. The current repository extends this into two
+splits, summarised in Table~\ref{tab:dataset}.
+
+\begin{table}[H]
+\centering
+\caption{Dataset splits used in the project.}\label{tab:dataset}
+\begin{tabular}{lrl}
+\toprule
+\textbf{Split} & \textbf{Papers} & \textbf{Purpose}\\
+\midrule
+\texttt{arxiv\_dataset/train.csv} & 136{,}238 & Embeddings, user profiles, fine-tuning, LTR\\
+\texttt{arxiv\_dataset/test.csv}  & 7{,}701   & Representation evaluation and candidate pool\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The processed CSV files retain the following fields:
+\begin{center}\ttfamily\small
+paper\_id, title, primary\_category, authors, first\_author,\\
+abstract, days\_since\_submission, recency\_score
+\end{center}
+
+Relative to the proposal, the current data does not directly preserve the
+fields \texttt{all\_categories}, \texttt{submitted\_date},
+\texttt{update\_lag\_days}, \texttt{is\_updated}, and
+\texttt{is\_large\_collaboration}. This matters for the LTR component: the
+proposal specifies five features
+(\texttt{cosine\_sim}, \texttt{recency\_score}, \texttt{update\_lag\_days},
+\texttt{is\_updated}, \texttt{category\_match}), whereas the current
+implementation uses three
+(\texttt{cosine\_sim}, \texttt{recency\_score}, \texttt{category\_match}).
+
+% ===========================================================================
+\section{Data Preprocessing}
+
+Preprocessing is implemented in \texttt{preprocess.py} /
+\texttt{preprocess.ipynb}, and the fitted text model is stored at
+\texttt{arxiv\_dataset/text\_preprocessor.pkl}. Abstracts are cleaned of
+LaTeX markup, lowercased, and tokenized. The representation artifacts produced
+are listed in Table~\ref{tab:repr-artifacts}.
+
+\begin{table}[H]
+\centering
+\caption{Representation artifacts (matrix shapes).}\label{tab:repr-artifacts}
+\begin{tabular}{lrr}
+\toprule
+\textbf{Representation} & \textbf{Train} & \textbf{Test}\\
+\midrule
+TF-IDF          & $(136238,\,10000)$ & $7{,}701$ rows\\
+SBERT pretrained & $(136238,\,384)$   & $(7701,\,384)$\\
+SBERT fine-tuned & $(136238,\,384)$   & $(7701,\,384)$\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The recency score uses an exponential decay with a configurable half-life:
+\begin{equation}
+\text{recency\_score} = \exp\!\left(-\ln 2 \cdot \frac{\text{age\_in\_days}}{\text{half\_life}}\right).
+\end{equation}
+
+\safefigure{temporal_weight_decay.png}{Temporal weight decay for several
+half-life settings.}{fig:decay}
+
+\begin{table}[H]
+\centering
+\caption{Decay weight as a function of half-life and elapsed time.}\label{tab:decay}
+\begin{tabular}{rrrrr}
+\toprule
+\textbf{Half-life} & \textbf{30 days} & \textbf{60 days} & \textbf{90 days} & \textbf{180 days}\\
+\midrule
+30 days & 0.5000 & 0.2500 & 0.1250 & 0.0156\\
+60 days & 0.7071 & 0.5000 & 0.3536 & 0.1250\\
+90 days & 0.7937 & 0.6300 & 0.5000 & 0.2500\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+A smaller half-life makes older behaviour lose influence faster. A 90-day
+half-life retains long-term interests better and is used as the primary
+evaluation configuration.
+
+% ===========================================================================
+\section{Text Representation}
+
+\subsection{TF-IDF}
+TF-IDF is a 10{,}000-dimensional bag-of-words baseline. It is simple,
+keyword-explainable, and tends to produce highly diverse lists. Its main
+weakness is that it does not capture semantic relationships between different
+words that share meaning.
+
+\subsection{Pretrained SBERT}
+The \texttt{all-MiniLM-L6-v2} model produces dense 384-dimensional vectors.
+Pretrained SBERT strongly improves semantic similarity over TF-IDF without any
+additional training.
+
+\subsection{Fine-tuned SBERT}
+The repository contains two checkpoints:
+\begin{center}\ttfamily\small
+finetune\_BERT/model\_checkpoint/finetuned-arxiv-sbert\_v1\\
+finetune\_BERT/model\_checkpoint/finetuned-arxiv-sbert\_v2
+\end{center}
+
+The proposal describes fine-tuning with \texttt{CosineSimilarityLoss} on
+positive/negative pairs. The current implementation instead uses
+\texttt{TripletLoss} with the following configuration:
+\begin{itemize}[leftmargin=1.4em]
+  \item base model: \texttt{all-MiniLM-L6-v2};
+  \item cosine distance;
+  \item triplet margin: \texttt{0.5};
+  \item batch size: \texttt{16};
+  \item epochs: \texttt{3}.
+\end{itemize}
+This is a deliberate change from the proposal. Triplet loss still satisfies the
+contrastive-learning objective, but the report records it explicitly to avoid
+misdescribing the method that was actually run. The triplet-generation script
+supports several positive/negative strategies, but the exact triplet input file
+it references is not present in the repository; checkpoints and output
+embeddings exist, so the pipeline is not yet fully reproducible from the stored
+files alone.
+
+% ===========================================================================
+\section{Temporal-Weighted User Profile}
+
+A user vector is computed from their reading history with decay weighting:
+\begin{align}
+\text{weight}(p) &= \exp\!\left(-\ln 2 \cdot \frac{\text{days\_since\_read}(p)}{\text{half\_life}}\right),\\
+\text{user\_vector} &= \text{weighted\_mean}\big(\text{paper\_embeddings},\ \text{weights}\big).
+\end{align}
+
+Profiles were generated for 1{,}000 synthetic users at half-life settings of
+30, 60, and 90 days, for both TF-IDF and SBERT.
+
+\safefigure{user_profile_statistics.png}{User profile vector statistics.}{fig:profile}
+
+\begin{table}[H]
+\centering
+\caption{TF-IDF user-profile vector norms.}\label{tab:tfidf-norm}
+\begin{tabular}{rrrrrr}
+\toprule
+\textbf{Half-life} & \textbf{Min} & \textbf{Max} & \textbf{Mean} & \textbf{Median} & \textbf{Std}\\
+\midrule
+30 & 0.2087 & 0.9442 & 0.3403 & 0.2973 & 0.1323\\
+60 & 0.2034 & 0.8453 & 0.3330 & 0.2908 & 0.1267\\
+90 & 0.2025 & 0.8038 & 0.3317 & 0.2901 & 0.1253\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[H]
+\centering
+\caption{SBERT user-profile vector norms.}\label{tab:sbert-norm}
+\begin{tabular}{rrrrrr}
+\toprule
+\textbf{Half-life} & \textbf{Min} & \textbf{Max} & \textbf{Mean} & \textbf{Median} & \textbf{Std}\\
+\midrule
+30 & 0.1903 & 0.9749 & 0.4105 & 0.3839 & 0.1300\\
+60 & 0.2052 & 0.9748 & 0.4233 & 0.4054 & 0.1234\\
+90 & 0.2101 & 0.9748 & 0.4289 & 0.4138 & 0.1217\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+As the half-life grows, the average TF-IDF profile norm decreases slightly
+while the average SBERT profile norm increases. Norm, however, does not
+directly measure recommendation quality. The proposal calls for comparing the
+mean profile against the decay-weighted profile using ranking metrics; this
+ablation is not yet quantified.
+
+% ===========================================================================
+\section{Cold-Start Handling}
+
+Cold-start is implemented in \texttt{cold\_start.py} and integrated into the
+Streamlit interface. The procedure is:
+\begin{enumerate}[leftmargin=1.6em]
+  \item the user selects one to three categories;
+  \item for each category, the system takes up to 20 papers with the highest
+  \texttt{recency\_score};
+  \item the cold-start vector is the mean embedding of the selected papers;
+  \item this vector is passed through LTR and MMR exactly like a user with
+  history.
+\end{enumerate}
+
+\begin{center}\ttfamily\small
+cold\_start\_vector =\\
+\hspace*{1em}mean(embeddings of top-20 recent papers per selected category)
+\end{center}
+
+Unit tests covering selection of the 20 most recent papers, categories with
+fewer than 20 papers, duplicate categories, and invalid input all pass.
+
+% ===========================================================================
+\section{Hybrid Scoring}
+
+The hybrid score linearly combines semantic similarity and recency:
+\begin{equation}
+\text{final\_score} = \alpha \cdot \text{cosine\_similarity}
++ (1-\alpha)\cdot \text{recency\_score}.
+\end{equation}
+The primary configuration uses $\alpha = 0.7$, half-life $=90$, and Top-$K=10$.
+The repository stores results for 1{,}000 users at half-life 30, 60, and 90.
+
+\safefigure{recommendations/hybrid_scoring_analysis.png}{TF-IDF hybrid scoring analysis.}{fig:hybrid-tfidf}
+\safefigure{recommendations_SBERT/hybrid_scoring_analysis.png}{SBERT hybrid scoring analysis.}{fig:hybrid-sbert}
+
+\begin{table}[H]
+\centering
+\caption{Hybrid scoring means computed directly from the stored JSON.}\label{tab:hybrid}
+\begin{tabular}{lrrrr}
+\toprule
+\textbf{Representation} & \textbf{Half-life} & \textbf{Mean sim.} & \textbf{Mean recency} & \textbf{Mean final}\\
+\midrule
+TF-IDF & 30 & 0.2532 & 0.0506 & 0.1924\\
+TF-IDF & 60 & 0.2500 & 0.0505 & 0.1902\\
+TF-IDF & 90 & 0.2492 & 0.0505 & 0.1896\\
+SBERT  & 30 & 0.7123 & 0.0505 & 0.5138\\
+SBERT  & 60 & 0.7107 & 0.0505 & 0.5126\\
+SBERT  & 90 & 0.7103 & 0.0505 & 0.5124\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[H]
+\centering
+\caption{Actual contribution share at half-life 90.}\label{tab:contrib}
+\begin{tabular}{lrr}
+\toprule
+\textbf{Representation} & \textbf{Semantic} & \textbf{Recency}\\
+\midrule
+TF-IDF & 92.00\% & 8.00\%\\
+SBERT  & 97.04\% & 2.96\%\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Although the configured weights are 70\% semantic and 30\% recency, the two
+components are not on the same scale: recommendation \texttt{recency\_score}
+values cluster around $0.05$, so the real recency contribution is only about
+3--8\%. To make recency influence match the configured ratio, the two features
+should be normalised or calibrated before being combined. The two hybrid PNG
+figures appear to have been generated from runs with a different configuration
+than the current folder names, so the table above (sourced from JSON) is
+treated as the authoritative quantitative source.
+
+% ===========================================================================
+\section{Learning-to-Rank}
+
+The LTR component is a \texttt{GradientBoostingClassifier}. Training data are
+generated from synthetic users via leave-one-out simulation:
+\begin{itemize}[leftmargin=1.4em]
+  \item positive: the hidden target paper;
+  \item negative: sampled non-relevant papers;
+  \item labels: 1 for positive, 0 for negative.
+\end{itemize}
+Two models are stored, \texttt{ltr\_tfidf.pkl} and \texttt{ltr\_sbert.pkl}, and
+LTR is integrated into the application to score the full candidate set before
+MMR reranking.
+
+\begin{table}[H]
+\centering
+\caption{Differences between proposal and current LTR implementation.}\label{tab:ltr-diff}
+\begin{tabular}{ll}
+\toprule
+\textbf{Proposal} & \textbf{Current implementation}\\
+\midrule
+5 features & 3 features\\
+Includes \texttt{update\_lag\_days} & Not included\\
+Includes \texttt{is\_updated} & Not included\\
+LTR vs cosine baseline by NDCG & No benchmark table yet\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The model artifacts exist and are used in the UI, but there is not yet a
+quantitative result demonstrating that LTR outperforms the hybrid/cosine
+baseline.
+
+% ===========================================================================
+\section{Diversity-aware Ranking with MMR}
+
+Maximal Marginal Relevance is implemented in \texttt{app.py}:
+\begin{equation}
+\text{MMR} = \lambda \cdot \text{relevance}
+- (1-\lambda)\cdot \max_{\text{selected}} \text{similarity}.
+\end{equation}
+In the live recommendation flow, LTR first selects the top 100 candidates, then
+MMR iteratively chooses 10 papers with $\lambda = 0.7$ to balance relevance and
+redundancy. MMR is therefore part of the actual pipeline, but the proposal's
+\emph{Naive Top-K vs MMR} ablation measured by Intra-list Diversity (ILD) is not
+yet tabulated, so the diversity improvement from MMR is not quantified.
+
+% ===========================================================================
+\section{Explainable Recommendations and Interface}
+
+The Streamlit UI in \texttt{app.py} supports selecting TF-IDF or SBERT,
+choosing an existing or cold-start user, viewing reading history, generating
+Top-10 recommendations, and displaying, per recommendation, the category, top
+TF-IDF keywords, LTR score, semantic similarity, and recency score. It also
+shows global LTR feature importance and visualises the user profile and
+recommendations with t-SNE.
+
+Relative to the proposal, most of the explanation information is present. The
+main gap is per-recommendation feature contribution: the UI currently shows
+only the model's global feature importance.
+
+% ===========================================================================
+\section{Evaluation Strategy and Results}
+
+Evaluation is run on the 7{,}701-paper test split using 500 synthetic test
+users, random seed 42, half-life 90, hybrid $\alpha=0.7$, and $K\in\{5,10,20\}$.
+The metrics are Category Precision@K, NDCG@K, Hit Rate@K, Semantic Coherence,
+Intra-list Diversity, and Silhouette Score.
+
+\safefigure{eval/outputs/representation_metrics.png}{Representation comparison metrics.}{fig:repr-metrics}
+
+\begin{table}[H]
+\centering
+\caption{Representation comparison across $K$.}\label{tab:repr-metrics}
+\small
+\begin{tabular}{lrrrrrr}
+\toprule
+\textbf{Method} & \textbf{K} & \textbf{Cat.\ Prec.} & \textbf{NDCG} & \textbf{Hit Rate} & \textbf{Sem.\ Coh.} & \textbf{ILD}\\
+\midrule
+TF-IDF & 5  & 0.8276 & 0.0000 & 0.000 & 0.2751 & 0.7934\\
+TF-IDF & 10 & 0.8164 & 0.0006 & 0.002 & 0.2662 & 0.8106\\
+TF-IDF & 20 & 0.8068 & 0.0011 & 0.004 & 0.2563 & 0.8299\\
+SBERT pretrained & 5  & 0.8848 & 0.0000 & 0.000 & 0.7305 & 0.3830\\
+SBERT pretrained & 10 & 0.8796 & 0.0000 & 0.000 & 0.7229 & 0.3960\\
+SBERT pretrained & 20 & 0.8720 & 0.0000 & 0.000 & 0.7138 & 0.4095\\
+SBERT fine-tuned & 5  & 1.0000 & 0.0000 & 0.000 & 0.7997 & 0.1696\\
+SBERT fine-tuned & 10 & 1.0000 & 0.0000 & 0.000 & 0.7910 & 0.1826\\
+SBERT fine-tuned & 20 & 1.0000 & 0.0000 & 0.000 & 0.7803 & 0.2008\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Fine-tuned SBERT achieves the highest Category Precision and Semantic
+Coherence, whereas TF-IDF achieves the highest ILD but the lowest coherence.
+This illustrates the relevance--diversity trade-off and motivates applying MMR
+on top of fine-tuned SBERT. NDCG and Hit Rate are very low because the target
+is a single specific paper while the system ranks over all 7{,}701 candidates:
+many other papers may match the topic without being counted as the positive.
+These two metrics are therefore not strong enough to draw conclusions about
+target retrieval.
+
+\safefigure{eval/outputs/tsne_compare_all.png}{t-SNE comparison of the three representations.}{fig:tsne}
+
+\begin{table}[H]
+\centering
+\caption{Silhouette Score by representation.}\label{tab:silhouette}
+\begin{tabular}{lr}
+\toprule
+\textbf{Method} & \textbf{Silhouette Score}\\
+\midrule
+TF-IDF & 0.0153\\
+SBERT pretrained & 0.0467\\
+SBERT fine-tuned & \textbf{0.3749}\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Fine-tuned SBERT forms clearly separated category clusters: its Silhouette
+Score is roughly 8$\times$ that of pretrained SBERT and about 24$\times$ that of
+TF-IDF. The t-SNE plots are illustrative only, since a 2-D projection can
+distort distances; Silhouette Score and the ranking metrics are the primary
+quantitative evidence.
+
+% ===========================================================================
+\section{Mapping to Proposal Objectives}
+
+\begin{table}[H]
+\centering
+\caption{Status of each proposal objective.}\label{tab:status}
+\small
+\begin{tabular}{p{3.1cm}p{2.4cm}p{4.2cm}p{4.0cm}}
+\toprule
+\textbf{Item} & \textbf{Status} & \textbf{Evidence} & \textbf{Missing}\\
+\midrule
+Data preprocessing & Basic complete & Train/test CSV, preprocessor, recency score & Some proposal metadata missing\\
+TF-IDF baseline & Complete & Train/test matrix, profile, evaluation & ---\\
+SBERT pretrained & Complete & Train/test embeddings, evaluation & ---\\
+Fine-tuned SBERT & Artifacts complete & Checkpoints, embeddings, t-SNE, metrics & Triplet pipeline not fully reproducible\\
+Temporal user profile & Complete & 1{,}000 users, half-life 30/60/90 & Mean-vs-decay ablation missing\\
+Cold-start & Complete & Code, UI, unit tests & No dedicated metric yet\\
+Hybrid scoring & Complete & TF-IDF/SBERT results, three half-lives & Needs semantic/recency normalisation\\
+Learning-to-Rank & Basic complete & Two models, UI integration & Two features and baseline benchmark missing\\
+MMR & Integrated & Reranking in Streamlit & Naive Top-K vs MMR ablation missing\\
+Explainability & Mostly complete & Keywords and score breakdown & Per-item LTR contribution missing\\
+Streamlit demo & Present & \texttt{app.py} & Needs stable end-to-end testing\\
+Evaluation framework & Complete for representation & 6 metrics, CSV/JSON/PNG & LTR, MMR, profile ablations not evaluated\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% ===========================================================================
+\section{Testing}
+
+\begin{table}[H]
+\centering
+\caption{Test results.}\label{tab:tests}
+\begin{tabular}{lr}
+\toprule
+\textbf{Test group} & \textbf{Result}\\
+\midrule
+Core project tests & 15/15 pass\\
+Evaluation tests & 10/10 pass\\
+Total & \textbf{25/25 pass}\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The tests cover cold-start, user profile generation, user t-SNE, synthetic test
+user creation, and the metric functions.
+
+% ===========================================================================
+\section{Limitations and Remaining Work}
+
+To fully satisfy the expected outcomes in the proposal, four groups of results
+are still missing:
+\begin{enumerate}[leftmargin=1.6em]
+  \item \textbf{Cosine baseline vs LTR:} run on the same candidate pool and user
+  set; report NDCG, Hit Rate, and Semantic Coherence; produce an official
+  feature-importance plot.
+  \item \textbf{Naive Top-K vs MMR:} report ILD before and after MMR and measure
+  the relevance drop to quantify the trade-off.
+  \item \textbf{Mean profile vs temporal-weighted profile:} compare mean and
+  half-life 30/60/90 using Category Precision, NDCG, and Semantic Coherence.
+  \item \textbf{Reproducibility:} store the triplet file (or a runnable triplet
+  generator with current paths), align the fine-tuning method between proposal
+  and implementation, and save evaluation output for LTR and MMR.
+\end{enumerate}
+
+In addition, the hybrid score needs calibration, since recency currently
+contributes only about 3\% with SBERT despite a configured weight of 30\%.
+
+% ===========================================================================
+\section{Conclusion}
+
+The repository realises a fairly complete recommendation pipeline in the
+direction of the proposal: preprocessing, three representations, a
+temporal user profile, cold-start handling, hybrid scoring, LTR, MMR,
+explainability, and a Streamlit UI all have implementations or stored
+artifacts.
+
+The strongest quantitative results lie in the representation stage:
+fine-tuned SBERT reaches a Category Precision of $1.0000$, a Semantic Coherence
+of $0.7910$ at $K=10$, and a Silhouette Score of $0.3749$, clearly above both
+baselines. However, the full proposal has not yet been confirmed
+experimentally: three important ablations --- LTR, MMR, and the temporal
+profile --- still lack comparison tables. The fair status of the project is thus
+that \emph{the pipeline is largely implemented, but the evaluation matrix in the
+proposal is not yet complete}.
+
+% ===========================================================================
+\section{Key Artifacts}
+
+\begin{table}[H]
+\centering
+\caption{Main project artifacts.}\label{tab:artifacts}
+\begin{tabular}{ll}
+\toprule
+\textbf{Component} & \textbf{Path}\\
+\midrule
+Original proposal & \texttt{proposal.docx}\\
+Streamlit application & \texttt{app.py}\\
+Cold-start & \texttt{cold\_start.py}\\
+User profile & \texttt{user\_profile\_generation.py}\\
+LTR training & \texttt{train\_ltr.py}, \texttt{LTR.ipynb}\\
+Fine-tuning & \texttt{finetune\_BERT/}\\
+Evaluation & \texttt{eval/evaluate\_representations.py}\\
+Synthetic test users & \texttt{eval/generate\_test\_users.py}\\
+Metric source & \texttt{eval/outputs/representation\_metrics.json}\\
+Metric chart & \texttt{eval/outputs/representation\_metrics.png}\\
+t-SNE chart & \texttt{eval/outputs/tsne\_compare\_all.png}\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% ===========================================================================
+\begin{thebibliography}{9}
+\bibitem{kaggle} ``7700+ Latest ArXiv AI/ML Research Papers (2025--2026),''
+Kaggle dataset.
+\bibitem{sbert} N.~Reimers and I.~Gurevych, ``Sentence-BERT: Sentence
+Embeddings using Siamese BERT-Networks,'' \emph{EMNLP}, 2019.
+\bibitem{minilm} W.~Wang et al., ``MiniLM: Deep Self-Attention Distillation for
+Task-Agnostic Compression of Pre-Trained Transformers,'' \emph{NeurIPS}, 2020.
+\bibitem{mmr} J.~Carbonell and J.~Goldstein, ``The Use of MMR, Diversity-Based
+Reranking for Reordering Documents and Producing Summaries,'' \emph{SIGIR},
+1998.
+\bibitem{gbm} J.~H. Friedman, ``Greedy Function Approximation: A Gradient
+Boosting Machine,'' \emph{Annals of Statistics}, vol.~29, no.~5, 2001.
+\bibitem{ndcg} K.~J\"arvelin and J.~Kek\"al\"ainen, ``Cumulated Gain-Based
+Evaluation of IR Techniques,'' \emph{ACM TOIS}, vol.~20, no.~4, 2002.
+\bibitem{sklearn} F.~Pedregosa et al., ``Scikit-learn: Machine Learning in
+Python,'' \emph{JMLR}, vol.~12, 2011.
+\bibitem{streamlit} Streamlit, ``Streamlit API Reference,''
+\url{https://docs.streamlit.io/}.
+\end{thebibliography}
+
+\end{document}
