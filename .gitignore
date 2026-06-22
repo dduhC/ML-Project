@@ -1,2 +1,5 @@
 *.csv
 *.pkl
+tfidf_matrix.npz
+SBERTEmbeddings.npy
+SBERTEmbeddings_final.npy
