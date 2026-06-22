@@ -20,10 +20,11 @@ HALF_LIFE = 90
 
 @st.cache_resource(show_spinner=False)
 def load_models():
-    ltr_model = joblib.load('ltr_model.pkl')
+    ltr_sbert = joblib.load('ltr_sbert.pkl')
+    ltr_tfidf = joblib.load('ltr_tfidf.pkl')
     preprocessor = joblib.load('arxiv_dataset/text_preprocessor.pkl')
     feature_names = preprocessor.vectorizer.get_feature_names_out()
-    return ltr_model, feature_names
+    return ltr_sbert, ltr_tfidf, feature_names
 
 @st.cache_data
 def load_data():
@@ -52,7 +53,7 @@ def load_data():
     return df, tfidf_test_sparse, sbert_test, synthetic_users, users_vector_tfidf, users_vector_sbert, user_metadata
 
 df, tfidf_test_sparse, sbert_test, synthetic_users, users_vector_tfidf, users_vector_sbert, user_metadata = load_data()
-ltr_model, feature_names = load_models()
+ltr_sbert, ltr_tfidf, feature_names = load_models()
 
 paper_ids = df['paper_id'].values
 paper_id_to_idx = {pid: i for i, pid in enumerate(paper_ids)}
@@ -91,7 +92,7 @@ def mmr_rerank(candidate_indices, relevance_scores, embeddings, top_k=10, lambda
 
     return selected
 
-def get_explainable_recommendations(user_vector, history_categories, test_embeddings, top_k=10):
+def get_explainable_recommendations(user_vector, history_categories, test_embeddings, ltr_model, top_k=10):
     # Candidate pool is the entire test set
     valid_indices = list(range(len(paper_ids)))
     
@@ -153,9 +154,11 @@ embedding_type = st.radio("Select Embedding Model for Recommendations:", ["SBERT
 if "SBERT" in embedding_type:
     active_test_embeddings = sbert_test
     active_users_vector = users_vector_sbert
+    active_ltr_model = ltr_sbert
 else:
     active_test_embeddings = tfidf_test_sparse
     active_users_vector = users_vector_tfidf
+    active_ltr_model = ltr_tfidf
 
 user_type = st.radio("Select User Type:", ["Existing User", "New User (Cold Start)"], horizontal=True)
 
@@ -182,11 +185,11 @@ if user_type == "Existing User":
             st.dataframe(history_df[['paper_id', 'title', 'primary_category']], use_container_width=True)
             
             st.markdown(f"### 🎯 Top 10 Recommendations from Test Set ({embedding_type})")
-            recs_df, recommendation_indices = get_explainable_recommendations(user_vec, history_categories, active_test_embeddings)
+            recs_df, recommendation_indices = get_explainable_recommendations(user_vec, history_categories, active_test_embeddings, active_ltr_model)
             st.dataframe(recs_df, use_container_width=True)
 
             st.markdown("#### 🧠 LTR Model Feature Importance Breakdown")
-            fi = ltr_model.feature_importances_
+            fi = active_ltr_model.feature_importances_
             fi_df = pd.DataFrame({
                 "Feature": ["Cosine Similarity", "Recency Score", "Category Match"],
                 "Importance Weight": [f"{v*100:.2f}%" for v in fi]
@@ -246,12 +249,12 @@ else:
                 
                 st.markdown(f"### 🎯 Top 10 Recommendations from Test Set ({embedding_type})")
                 recs_df, recommendation_indices = get_explainable_recommendations(
-                    pseudo_vec, history_categories, active_test_embeddings
+                    pseudo_vec, history_categories, active_test_embeddings, active_ltr_model
                 )
                 st.dataframe(recs_df, use_container_width=True)
 
                 st.markdown("#### 🧠 LTR Model Feature Importance Breakdown")
-                fi = ltr_model.feature_importances_
+                fi = active_ltr_model.feature_importances_
                 fi_df = pd.DataFrame({
                     "Feature": ["Cosine Similarity", "Recency Score", "Category Match"],
                     "Importance Weight": [f"{v*100:.2f}%" for v in fi]
