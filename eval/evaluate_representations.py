@@ -245,11 +245,14 @@ def load_users(df: pd.DataFrame) -> list[dict[str, Any]]:
     return users
 
 
-def create_metrics_chart(summary: pd.DataFrame) -> None:
+def create_metrics_chart(
+    summary: pd.DataFrame,
+    silhouette_scores: dict[str, float],
+) -> None:
     plots = [
-        ("category_precision_mean", "Category Precision"),
-        ("ndcg_mean", "NDCG"),
-        ("hit_rate_mean", "Hit Rate"),
+        ("category_precision_mean", "Category Precision@K"),
+        ("ndcg_mean", "NDCG@K"),
+        ("hit_rate_mean", "Hit Rate@K"),
         ("semantic_coherence_mean", "Semantic Coherence"),
         ("ild_mean", "Intra-list Diversity"),
     ]
@@ -257,8 +260,10 @@ def create_metrics_chart(summary: pd.DataFrame) -> None:
     k_values = sorted(summary["k"].unique())
     x = np.arange(len(k_values))
     figure, axes = plt.subplots(2, 3, figsize=(18, 10))
+    axes = axes.ravel()
+    colors = plt.rcParams["axes.prop_cycle"].by_key()["color"][: len(models)]
 
-    for axis, (column, title) in zip(axes.ravel(), plots):
+    for axis, (column, title) in zip(axes, plots):
         for offset, model in enumerate(models):
             subset = summary[summary["representation"] == model].set_index("k")
             axis.bar(
@@ -266,13 +271,27 @@ def create_metrics_chart(summary: pd.DataFrame) -> None:
                 [subset.loc[k, column] for k in k_values],
                 0.24,
                 label=model,
+                color=colors[offset],
             )
         axis.set_title(title)
         axis.set_xticks(x, [f"K={k}" for k in k_values])
         axis.grid(axis="y", alpha=0.25)
 
-    axes.ravel()[-1].axis("off")
-    handles, labels = axes.ravel()[0].get_legend_handles_labels()
+    silhouette_axis = axes[-1]
+    silhouette_values = [silhouette_scores[model] for model in models]
+    silhouette_axis.bar(
+        np.arange(len(models)),
+        silhouette_values,
+        color=colors,
+    )
+    silhouette_axis.set_title("Silhouette Score")
+    silhouette_axis.set_xticks(
+        np.arange(len(models)),
+        [model.replace(" ", "\n", 1) for model in models],
+    )
+    silhouette_axis.grid(axis="y", alpha=0.25)
+
+    handles, labels = axes[0].get_legend_handles_labels()
     figure.legend(handles, labels, loc="lower center", ncol=3)
     figure.tight_layout(rect=(0, 0.06, 1, 1))
     figure.savefig(
@@ -449,8 +468,8 @@ def main() -> None:
 
     per_user = pd.DataFrame(rows)
     summary = summarize_metrics(per_user)
-    create_metrics_chart(summary)
     silhouette_scores = create_tsne(representations, categories)
+    create_metrics_chart(summary, silhouette_scores)
     write_outputs(per_user, summary, silhouette_scores)
     print(f"Evaluation outputs: {OUTPUT_DIR.resolve()}")
 
