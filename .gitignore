@@ -13,3 +13,4 @@ __pycache__/*
 AGENTS.md
 docs/proposal.md
 arxiv_dataset/tfidf_test_matrix.npz
+*/*/metric_explain.md
