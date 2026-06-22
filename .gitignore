@@ -12,3 +12,4 @@ __pycache__/*
 *.docx
 AGENTS.md
 docs/proposal.md
+arxiv_dataset/tfidf_test_matrix.npz

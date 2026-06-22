@@ -49,5 +49,9 @@ def build_cold_start_profile(
         )
 
     seed_indices = np.asarray(selected_indices, dtype=np.int64)
-    profile_vector = np.asarray(embeddings[seed_indices]).mean(axis=0)
+    seed_embeds = embeddings[seed_indices]
+    import scipy.sparse
+    if scipy.sparse.issparse(seed_embeds):
+        seed_embeds = seed_embeds.toarray()
+    profile_vector = np.asarray(seed_embeds).mean(axis=0).flatten()
     return profile_vector, seed_indices

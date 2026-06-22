@@ -63,6 +63,12 @@ def prepare_user_tsne_data(
 
     rows: list[dict[str, object]] = []
     vectors: list[np.ndarray] = []
+    import scipy.sparse
+    def _to_dense_1d(vec):
+        if scipy.sparse.issparse(vec):
+            return vec.toarray()[0]
+        return np.asarray(vec).flatten()
+
     for idx in background_indices:
         rows.append(
             {
@@ -72,7 +78,7 @@ def prepare_user_tsne_data(
                 "rank": np.nan,
             }
         )
-        vectors.append(embeddings[idx])
+        vectors.append(_to_dense_1d(embeddings[idx]))
 
     for idx in context_indices:
         rows.append(
@@ -83,7 +89,7 @@ def prepare_user_tsne_data(
                 "rank": np.nan,
             }
         )
-        vectors.append(embeddings[idx])
+        vectors.append(_to_dense_1d(embeddings[idx]))
 
     for rank, idx in enumerate(recommendation_indices, start=1):
         rows.append(
@@ -94,7 +100,7 @@ def prepare_user_tsne_data(
                 "rank": rank,
             }
         )
-        vectors.append(embeddings[idx])
+        vectors.append(_to_dense_1d(embeddings[idx]))
 
     rows.append(
         {
@@ -104,7 +110,7 @@ def prepare_user_tsne_data(
             "rank": np.nan,
         }
     )
-    vectors.append(user_vector)
+    vectors.append(_to_dense_1d(user_vector))
 
     frame = pd.DataFrame(rows)
     frame.attrs["vectors"] = normalize(np.asarray(vectors), norm="l2")
@@ -255,13 +261,18 @@ def _validate_inputs(
 ) -> None:
     if "primary_category" not in df.columns:
         raise ValueError("DataFrame must contain primary_category.")
-    if embeddings.ndim != 2 or len(df) != len(embeddings):
+    import scipy.sparse
+    if embeddings.ndim != 2 or len(df) != embeddings.shape[0]:
         raise ValueError("DataFrame and embeddings must have matching paper rows.")
-    user_vector = np.asarray(user_vector)
+    if scipy.sparse.issparse(user_vector):
+        user_vector = user_vector.toarray()[0]
+    else:
+        user_vector = np.asarray(user_vector).flatten()
     if user_vector.ndim != 1 or user_vector.shape[0] != embeddings.shape[1]:
         raise ValueError("User vector dimension must match paper embeddings.")
-    if not np.isfinite(embeddings).all() or not np.isfinite(user_vector).all():
-        raise ValueError("Embeddings and user vector must contain finite values.")
+    if not scipy.sparse.issparse(embeddings):
+        if not np.isfinite(embeddings).all() or not np.isfinite(user_vector).all():
+            raise ValueError("Embeddings and user vector must contain finite values.")
     if samples_per_category <= 0:
         raise ValueError("samples_per_category must be greater than zero.")
 
