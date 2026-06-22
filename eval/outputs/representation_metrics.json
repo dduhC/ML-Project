@@ -29,10 +29,10 @@
       "semantic_coherence_std": 0.04373430548257107,
       "ild_mean": 0.7933587605405762,
       "ild_std": 0.08187443473371118,
-      "profile_seconds_mean": 0.00036660900007700546,
-      "profile_seconds_std": 0.00011079930529178893,
-      "ranking_seconds_mean": 0.013111551600275561,
-      "ranking_seconds_std": 0.0014973788585854835
+      "profile_seconds_mean": 0.00038508900109445675,
+      "profile_seconds_std": 0.0001358796165575803,
+      "ranking_seconds_mean": 0.013751704199472442,
+      "ranking_seconds_std": 0.0037978152748646948
     },
     {
       "representation": "TF-IDF",
@@ -47,10 +47,10 @@
       "semantic_coherence_std": 0.04343292326371275,
       "ild_mean": 0.8106211513579527,
       "ild_std": 0.0668676143681814,
-      "profile_seconds_mean": 0.00036660900007700546,
-      "profile_seconds_std": 0.00011079930529178893,
-      "ranking_seconds_mean": 0.013111551600275561,
-      "ranking_seconds_std": 0.0014973788585854835
+      "profile_seconds_mean": 0.00038508900109445675,
+      "profile_seconds_std": 0.0001358796165575803,
+      "ranking_seconds_mean": 0.013751704199472442,
+      "ranking_seconds_std": 0.0037978152748646948
     },
     {
       "representation": "TF-IDF",
@@ -65,10 +65,10 @@
       "semantic_coherence_std": 0.04343231546431643,
       "ild_mean": 0.8298889932411039,
       "ild_std": 0.055011264809271467,
-      "profile_seconds_mean": 0.00036660900007700546,
-      "profile_seconds_std": 0.00011079930529178893,
-      "ranking_seconds_mean": 0.013111551600275561,
-      "ranking_seconds_std": 0.0014973788585854835
+      "profile_seconds_mean": 0.00038508900109445675,
+      "profile_seconds_std": 0.0001358796165575803,
+      "ranking_seconds_mean": 0.013751704199472442,
+      "ranking_seconds_std": 0.0037978152748646948
     },
     {
       "representation": "SBERT pretrained",
@@ -83,10 +83,10 @@
       "semantic_coherence_std": 0.03541788451575169,
       "ild_mean": 0.3830328988432884,
       "ild_std": 0.04424584767071778,
-      "profile_seconds_mean": 8.548439963487909e-05,
-      "profile_seconds_std": 2.9064012047148203e-05,
-      "ranking_seconds_mean": 0.02666472639935091,
-      "ranking_seconds_std": 0.00228470254331308
+      "profile_seconds_mean": 8.77601996762678e-05,
+      "profile_seconds_std": 3.12176070980964e-05,
+      "ranking_seconds_mean": 0.025421359400206713,
+      "ranking_seconds_std": 0.003738130095037578
     },
     {
       "representation": "SBERT pretrained",
@@ -101,10 +101,10 @@
       "semantic_coherence_std": 0.03629817701690197,
       "ild_mean": 0.39602786117792127,
       "ild_std": 0.039995786003088174,
-      "profile_seconds_mean": 8.548439963487909e-05,
-      "profile_seconds_std": 2.9064012047148203e-05,
-      "ranking_seconds_mean": 0.02666472639935091,
-      "ranking_seconds_std": 0.00228470254331308
+      "profile_seconds_mean": 8.77601996762678e-05,
+      "profile_seconds_std": 3.12176070980964e-05,
+      "ranking_seconds_mean": 0.025421359400206713,
+      "ranking_seconds_std": 0.003738130095037578
     },
     {
       "representation": "SBERT pretrained",
@@ -119,10 +119,10 @@
       "semantic_coherence_std": 0.037695467713391495,
       "ild_mean": 0.4094520381689072,
       "ild_std": 0.03833028407177303,
-      "profile_seconds_mean": 8.548439963487909e-05,
-      "profile_seconds_std": 2.9064012047148203e-05,
-      "ranking_seconds_mean": 0.02666472639935091,
-      "ranking_seconds_std": 0.00228470254331308
+      "profile_seconds_mean": 8.77601996762678e-05,
+      "profile_seconds_std": 3.12176070980964e-05,
+      "ranking_seconds_mean": 0.025421359400206713,
+      "ranking_seconds_std": 0.003738130095037578
     },
     {
       "representation": "SBERT fine-tuned",
@@ -137,10 +137,10 @@
       "semantic_coherence_std": 0.09353406706970029,
       "ild_mean": 0.16961715524643659,
       "ild_std": 0.08395048275635068,
-      "profile_seconds_mean": 8.224100060760975e-05,
-      "profile_seconds_std": 2.2756855627323093e-05,
-      "ranking_seconds_mean": 0.026439762199006508,
-      "ranking_seconds_std": 0.0018730630142674899
+      "profile_seconds_mean": 9.00798004004173e-05,
+      "profile_seconds_std": 5.295091696921092e-05,
+      "ranking_seconds_mean": 0.0244986030003638,
+      "ranking_seconds_std": 0.0020008119648828268
     },
     {
       "representation": "SBERT fine-tuned",
@@ -155,10 +155,10 @@
       "semantic_coherence_std": 0.0944682926362143,
       "ild_mean": 0.18259689657390119,
       "ild_std": 0.08012513869093617,
-      "profile_seconds_mean": 8.224100060760975e-05,
-      "profile_seconds_std": 2.2756855627323093e-05,
-      "ranking_seconds_mean": 0.026439762199006508,
-      "ranking_seconds_std": 0.0018730630142674899
+      "profile_seconds_mean": 9.00798004004173e-05,
+      "profile_seconds_std": 5.295091696921092e-05,
+      "ranking_seconds_mean": 0.0244986030003638,
+      "ranking_seconds_std": 0.0020008119648828268
     },
     {
       "representation": "SBERT fine-tuned",
@@ -173,10 +173,10 @@
       "semantic_coherence_std": 0.09564614353062179,
       "ild_mean": 0.20084286656975747,
       "ild_std": 0.08205908948293747,
-      "profile_seconds_mean": 8.224100060760975e-05,
-      "profile_seconds_std": 2.2756855627323093e-05,
-      "ranking_seconds_mean": 0.026439762199006508,
-      "ranking_seconds_std": 0.0018730630142674899
+      "profile_seconds_mean": 9.00798004004173e-05,
+      "profile_seconds_std": 5.295091696921092e-05,
+      "ranking_seconds_mean": 0.0244986030003638,
+      "ranking_seconds_std": 0.0020008119648828268
     }
   ]
 }
