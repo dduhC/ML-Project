@@ -1,5 +1,4 @@
 *.csv
-*.pkl
 venv/*
 .DS_Store
 arxiv_dataset/SBERTEmbeddings.npy
